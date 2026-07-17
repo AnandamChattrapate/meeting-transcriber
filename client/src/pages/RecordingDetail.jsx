@@ -125,16 +125,16 @@ export default function RecordingDetail() {
                 onChange={(e) => setTitleInput(e.target.value)}
                 onKeyDown={handleTitleKeyDown}
               />
-              <button className="upload-btn" onClick={saveTitle}>Save</button>
+              <button className="upload-btn" style={{ fontSize: 14, padding: '8px 16px' }} onClick={saveTitle}>Save</button>
               <button className="btn-ghost" onClick={() => setEditingTitle(false)}>Cancel</button>
             </div>
           ) : (
             <div className="title-row">
-              <h1 style={{ margin: 0 }}>{displayTitle}</h1>
+              <h1>{displayTitle}</h1>
               <button className="edit-btn" onClick={startEdit} title="Rename">✏</button>
             </div>
           )}
-          <p className="muted" style={{ marginTop: 6, fontSize: 14 }}>{formatDate(recording.recordedAt)}</p>
+          <p className="muted" style={{ marginTop: 6, fontSize: 13 }}>{formatDate(recording.recordedAt)}</p>
         </div>
 
         {isDone && (
@@ -157,7 +157,7 @@ export default function RecordingDetail() {
       {isDone && (
         <>
           {recording.summary?.length > 0 && (
-            <div className="section-card">
+            <div className="section-card" style={{ animationDelay: '0.08s' }}>
               <p className="section-title">Summary</p>
               <ul className="summary-list">
                 {recording.summary.map((point, i) => (
@@ -168,7 +168,7 @@ export default function RecordingDetail() {
           )}
 
           {recording.actionItems?.length > 0 && (
-            <div className="section-card">
+            <div className="section-card" style={{ animationDelay: '0.14s' }}>
               <p className="section-title">Action Items</p>
               <ul className="action-list">
                 {recording.actionItems.map((item, i) => (
@@ -178,7 +178,7 @@ export default function RecordingDetail() {
             </div>
           )}
 
-          <div className="section-card">
+          <div className="section-card" style={{ animationDelay: '0.20s' }}>
             <p className="section-title">Transcript</p>
             <pre className="transcript">{transcript}</pre>
           </div>

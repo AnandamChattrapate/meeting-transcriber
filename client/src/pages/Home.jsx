@@ -15,6 +15,23 @@ function formatDate(dateStr) {
   });
 }
 
+const tilt = (e) => {
+  const el = e.currentTarget;
+  el.style.transition = 'transform 0.06s linear, box-shadow 0.3s ease, border-color 0.25s ease';
+  const rect = el.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width - 0.5;
+  const y = (e.clientY - rect.top) / rect.height - 0.5;
+  el.style.setProperty('--rx', `${y * -7}deg`);
+  el.style.setProperty('--ry', `${x * 7}deg`);
+};
+
+const resetTilt = (e) => {
+  const el = e.currentTarget;
+  el.style.transition = 'transform 0.5s ease, box-shadow 0.3s ease, border-color 0.25s ease';
+  el.style.removeProperty('--rx');
+  el.style.removeProperty('--ry');
+};
+
 export default function Home() {
   const [recordings, setRecordings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,9 +138,18 @@ export default function Home() {
         </p>
       ) : (
         <ul className="recording-list">
-          {filtered.map((rec) => (
-            <li key={rec._id} className="recording-row">
-              <Link to={`/recordings/${rec._id}`} className="recording-item">
+          {filtered.map((rec, i) => (
+            <li
+              key={rec._id}
+              className="recording-row"
+              style={{ animationDelay: `${i * 0.06}s` }}
+            >
+              <Link
+                to={`/recordings/${rec._id}`}
+                className="recording-item"
+                onMouseMove={tilt}
+                onMouseLeave={resetTilt}
+              >
                 <span className="recording-name">{rec.title || rec.originalName}</span>
                 <span className="recording-date">{formatDate(rec.recordedAt)}</span>
                 <span className={`status-pill status-${rec.status}`}>
@@ -132,7 +158,7 @@ export default function Home() {
               </Link>
               {confirmDelete === rec._id ? (
                 <div className="confirm-delete">
-                  <span className="muted" style={{ fontSize: 14 }}>Delete?</span>
+                  <span className="muted" style={{ fontSize: 13 }}>Delete?</span>
                   <button className="btn-danger" onClick={() => handleDelete(rec._id)}>Yes</button>
                   <button className="btn-ghost" onClick={() => setConfirmDelete(null)}>No</button>
                 </div>
