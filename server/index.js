@@ -4,12 +4,14 @@ const cors = require('cors');
 const path = require('path');
 const mongoose = require('mongoose');
 const recordingsRouter = require('./routes/recordings');
+const meetingsRouter = require('./routes/meetings');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.use('/api/recordings', recordingsRouter);
+app.use('/api/meetings', meetingsRouter);
 
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '..', 'client', 'dist');
