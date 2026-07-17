@@ -60,10 +60,6 @@
   animation: orb-3 36s ease-in-out infinite;
 }
 /* Dark mode orbs — brighter so they glow through dark glass */
-[data-theme="dark"] .orb-1,
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .orb-1 {
-  background: radial-gradient(circle, rgba(139,92,246,.52) 0%, transparent 65%);
-}}
 [data-theme="dark"] .orb-1 {
   background: radial-gradient(circle, rgba(139,92,246,.52) 0%, transparent 65%);
 }
