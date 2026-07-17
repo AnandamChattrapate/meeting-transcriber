@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: meeting-transcriber
+    env: node
+    region: oregon
+    plan: starter
+    buildCommand: "cd client && npm ci && npm run build && cd ../server && npm ci"
+    startCommand: "node server/index.js"
+    disk:
+      name: uploads
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: UPLOADS_DIR
+        value: /data/uploads
+      - key: GROQ_WHISPER_MODEL
+        value: whisper-large-v3-turbo
+      - key: MONGO_URI
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
