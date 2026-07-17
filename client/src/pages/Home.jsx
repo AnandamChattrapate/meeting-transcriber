@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listRecordings, uploadRecording } from '../api';
+import { listRecordings, uploadRecording, deleteRecording } from '../api';
 
 const STATUS_LABEL = {
   processing: 'Transcribing…',
@@ -20,6 +20,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
 
@@ -34,9 +36,7 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
     const hasProcessing = recordings.some((r) => r.status === 'processing');
@@ -47,10 +47,7 @@ export default function Home() {
       pollRef.current = null;
     }
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
   }, [recordings, refresh]);
 
@@ -70,6 +67,22 @@ export default function Home() {
     }
   };
 
+  const handleDelete = async (id) => {
+    try {
+      await deleteRecording(id);
+      setRecordings((prev) => prev.filter((r) => r._id !== id));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setConfirmDelete(null);
+    }
+  };
+
+  const filtered = recordings.filter((r) => {
+    const q = search.toLowerCase();
+    return !q || (r.title || r.originalName).toLowerCase().includes(q);
+  });
+
   return (
     <div className="page">
       <header className="page-header">
@@ -87,23 +100,51 @@ export default function Home() {
         </label>
       </header>
 
+      {recordings.length > 0 && (
+        <input
+          className="search-input"
+          placeholder="Search recordings…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      )}
+
       {error && <div className="error-banner">{error}</div>}
 
       {loading ? (
         <p className="muted">Loading…</p>
-      ) : recordings.length === 0 ? (
-        <p className="muted">No recordings yet. Upload one to get started.</p>
+      ) : filtered.length === 0 ? (
+        <p className="muted">
+          {recordings.length === 0
+            ? 'No recordings yet. Upload one to get started.'
+            : 'No recordings match your search.'}
+        </p>
       ) : (
         <ul className="recording-list">
-          {recordings.map((rec) => (
-            <li key={rec._id}>
+          {filtered.map((rec) => (
+            <li key={rec._id} className="recording-row">
               <Link to={`/recordings/${rec._id}`} className="recording-item">
-                <span className="recording-name">{rec.originalName}</span>
+                <span className="recording-name">{rec.title || rec.originalName}</span>
                 <span className="recording-date">{formatDate(rec.recordedAt)}</span>
                 <span className={`status-pill status-${rec.status}`}>
                   {STATUS_LABEL[rec.status] || rec.status}
                 </span>
               </Link>
+              {confirmDelete === rec._id ? (
+                <div className="confirm-delete">
+                  <span className="muted" style={{ fontSize: 14 }}>Delete?</span>
+                  <button className="btn-danger" onClick={() => handleDelete(rec._id)}>Yes</button>
+                  <button className="btn-ghost" onClick={() => setConfirmDelete(null)}>No</button>
+                </div>
+              ) : (
+                <button
+                  className="btn-ghost delete-btn"
+                  onClick={() => setConfirmDelete(rec._id)}
+                  title="Delete recording"
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
         </ul>

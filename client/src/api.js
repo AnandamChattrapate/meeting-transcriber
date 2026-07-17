@@ -13,5 +13,7 @@ export const uploadRecording = (file, onProgress) => {
     })
     .then((r) => r.data);
 };
+export const deleteRecording = (id) => api.delete(`/recordings/${id}`).then((r) => r.data);
+export const renameRecording = (id, title) => api.patch(`/recordings/${id}`, { title }).then((r) => r.data);
 
 export default api;

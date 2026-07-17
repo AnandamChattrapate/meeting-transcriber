@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { getRecording } from '../api';
+import { getRecording, renameRecording } from '../api';
 
 function formatDate(dateStr) {
   return new Date(dateStr).toLocaleString(undefined, {
@@ -14,7 +14,10 @@ export default function RecordingDetail() {
   const [recording, setRecording] = useState(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState('');
   const pollRef = useRef(null);
+  const titleInputRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -25,9 +28,7 @@ export default function RecordingDetail() {
     }
   }, [id]);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh]);
 
   useEffect(() => {
     if (recording?.status === 'processing' && !pollRef.current) {
@@ -37,17 +38,54 @@ export default function RecordingDetail() {
       pollRef.current = null;
     }
     return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
   }, [recording, refresh]);
 
+  useEffect(() => {
+    if (editingTitle) titleInputRef.current?.focus();
+  }, [editingTitle]);
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(recording.transcript);
+    const text = recording.cleanedTranscript || recording.transcript;
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownload = () => {
+    const name = (recording.title || recording.originalName).replace(/\.[^.]+$/, '');
+    const text = recording.cleanedTranscript || recording.transcript;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const startEdit = () => {
+    setTitleInput(recording.title || recording.originalName);
+    setEditingTitle(true);
+  };
+
+  const saveTitle = async () => {
+    const trimmed = titleInput.trim();
+    if (!trimmed) { setEditingTitle(false); return; }
+    try {
+      const updated = await renameRecording(id, trimmed);
+      setRecording((prev) => ({ ...prev, title: updated.title }));
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setEditingTitle(false);
+    }
+  };
+
+  const handleTitleKeyDown = (e) => {
+    if (e.key === 'Enter') saveTitle();
+    if (e.key === 'Escape') setEditingTitle(false);
   };
 
   if (error) {
@@ -68,27 +106,83 @@ export default function RecordingDetail() {
     );
   }
 
+  const displayTitle = recording.title || recording.originalName;
+  const transcript = recording.cleanedTranscript || recording.transcript;
+  const isDone = recording.status === 'done';
+
   return (
     <div className="page">
       <Link to="/" className="back-link">← Back</Link>
+
       <header className="page-header">
-        <div>
-          <h1>{recording.originalName}</h1>
-          <p className="muted">{formatDate(recording.recordedAt)}</p>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {editingTitle ? (
+            <div className="title-row">
+              <input
+                ref={titleInputRef}
+                className="title-input"
+                value={titleInput}
+                onChange={(e) => setTitleInput(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+              />
+              <button className="upload-btn" onClick={saveTitle}>Save</button>
+              <button className="btn-ghost" onClick={() => setEditingTitle(false)}>Cancel</button>
+            </div>
+          ) : (
+            <div className="title-row">
+              <h1 style={{ margin: 0 }}>{displayTitle}</h1>
+              <button className="edit-btn" onClick={startEdit} title="Rename">✏</button>
+            </div>
+          )}
+          <p className="muted" style={{ marginTop: 6, fontSize: 14 }}>{formatDate(recording.recordedAt)}</p>
         </div>
-        {recording.status === 'done' && (
-          <button className="upload-btn" onClick={handleCopy}>
-            {copied ? 'Copied!' : 'Copy text'}
-          </button>
+
+        {isDone && (
+          <div className="toolbar">
+            <button className="btn-ghost" onClick={handleCopy}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+            <button className="btn-ghost" onClick={handleDownload}>Download .txt</button>
+          </div>
         )}
       </header>
 
-      {recording.status === 'processing' && <p className="muted">Transcribing… this page will update automatically.</p>}
+      {recording.status === 'processing' && (
+        <p className="muted">Transcribing and processing… this page will update automatically.</p>
+      )}
       {recording.status === 'failed' && (
         <div className="error-banner">Transcription failed: {recording.errorMessage}</div>
       )}
-      {recording.status === 'done' && (
-        <pre className="transcript">{recording.transcript}</pre>
+
+      {isDone && (
+        <>
+          {recording.summary?.length > 0 && (
+            <div className="section-card">
+              <p className="section-title">Summary</p>
+              <ul className="summary-list">
+                {recording.summary.map((point, i) => (
+                  <li key={i}>{point}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {recording.actionItems?.length > 0 && (
+            <div className="section-card">
+              <p className="section-title">Action Items</p>
+              <ul className="action-list">
+                {recording.actionItems.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="section-card">
+            <p className="section-title">Transcript</p>
+            <pre className="transcript">{transcript}</pre>
+          </div>
+        </>
       )}
     </div>
   );

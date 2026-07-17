@@ -3,7 +3,7 @@ const fs = require('fs');
 const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
-const { uploadRecording, listRecordings, getRecording } = require('../controllers/recordingsController');
+const { uploadRecording, listRecordings, getRecording, deleteRecording, renameRecording } = require('../controllers/recordingsController');
 
 const router = express.Router();
 
@@ -33,5 +33,7 @@ const upload = multer({
 router.post('/', upload.single('audio'), uploadRecording);
 router.get('/', listRecordings);
 router.get('/:id', getRecording);
+router.delete('/:id', deleteRecording);
+router.patch('/:id', renameRecording);
 
 module.exports = router;
