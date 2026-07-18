@@ -16,4 +16,16 @@ export const uploadRecording = (file, onProgress) => {
 export const deleteRecording = (id) => api.delete(`/recordings/${id}`).then((r) => r.data);
 export const renameRecording = (id, title) => api.patch(`/recordings/${id}`, { title }).then((r) => r.data);
 
+// Live meetings
+export const startMeeting = (title) => api.post('/meetings', { title }).then((r) => r.data);
+export const sendChunk = (meetingId, blob) => {
+  const form = new FormData();
+  form.append('audio', blob, 'chunk.webm');
+  return api.post(`/meetings/${meetingId}/chunk`, form).then((r) => r.data);
+};
+export const endMeeting = (meetingId, emailTo) =>
+  api.post(`/meetings/${meetingId}/end`, { emailTo }).then((r) => r.data);
+export const getMeeting = (id) => api.get(`/meetings/${id}`).then((r) => r.data);
+export const listMeetings = () => api.get('/meetings').then((r) => r.data);
+
 export default api;
