@@ -1,6 +1,6 @@
 import Foundation
 
-struct Meeting: Identifiable, Codable {
+struct Meeting: Identifiable, Codable, Hashable {
     let id: String
     var title: String
     var status: MeetingStatus

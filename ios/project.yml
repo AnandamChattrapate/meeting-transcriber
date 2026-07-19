@@ -25,8 +25,16 @@ targets:
         CFBundleDisplayName: Meeting Transcriber
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+            127.0.0.1:
+              NSExceptionAllowsInsecureHTTPLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.chattrapateanandam.meetingtranscriber
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: YES

@@ -5,7 +5,7 @@ const { processTranscript } = require('../utils/processTranscript');
 const { sendMeetingSummaryEmail } = require('../utils/sendEmail');
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '..', 'uploads');
-const SUMMARY_INTERVAL_MS = 5 * 60 * 1000;
+const SUMMARY_INTERVAL_MS = 2.5 * 60 * 1000;
 
 async function startMeeting(req, res) {
   const { title = '' } = req.body;

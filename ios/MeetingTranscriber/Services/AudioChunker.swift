@@ -5,7 +5,7 @@ class AudioChunker: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var elapsedSeconds = 0
 
-    var onChunkReady: ((URL) async -> Void)?
+    var onChunkReady: (@MainActor (URL) async -> Void)?
 
     private var recorder: AVAudioRecorder?
     private var chunkTimer: Timer?
@@ -14,9 +14,11 @@ class AudioChunker: NSObject, ObservableObject {
     private let chunkDuration: TimeInterval = 30
 
     func start() async throws {
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .default, options: [.allowBluetooth])
+        try session.setCategory(.record, mode: .default, options: [.allowBluetoothHFP])
         try session.setActive(true)
+        #endif
 
         isRecording = true
         elapsedSeconds = 0
@@ -38,7 +40,9 @@ class AudioChunker: NSObject, ObservableObject {
         isRecording = false
         let url = currentChunkURL
         recorder?.stop(); recorder = nil
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false)
+        #endif
         return url
     }
 

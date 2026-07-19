@@ -1,21 +1,23 @@
 import SwiftUI
 
+@MainActor
 @Observable
 class ActiveMeetingModel {
     var meeting: Meeting
     var rollingSnapshot: String = ""
     var isProcessing = false
+    var isRecording = false
+    var elapsed: Int = 0
     var errorMessage: String?
 
     private let chunker = AudioChunker()
     private var summaryTimer: Timer?
-
-    var elapsed: Int { chunker.elapsedSeconds }
-    var isRecording: Bool { chunker.isRecording }
+    private var elapsedTimer: Timer?
+    private var hasStarted = false
 
     init(meeting: Meeting) {
         self.meeting = meeting
-        chunker.onChunkReady = { [weak self] url in
+        chunker.onChunkReady = { @MainActor [weak self] (url: URL) in
             guard let self else { return }
             self.isProcessing = true
             if let snapshot = try? await APIClient.shared.sendChunk(meetingId: self.meeting.id, audioURL: url),
@@ -26,13 +28,27 @@ class ActiveMeetingModel {
         }
     }
 
-    func startRecording() async {
-        do { try await chunker.start() } catch { errorMessage = error.localizedDescription }
-        // Refresh snapshot every 5 min from server
-        summaryTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+    func startIfNeeded() async {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        do {
+            try await chunker.start()
+            isRecording = true
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.elapsed += 1 }
+        }
+
+        summaryTimer = Timer.scheduledTimer(withTimeInterval: 150, repeats: true) { [weak self] _ in
             guard let self else { return }
-            Task {
-                if let m = try? await APIClient.shared.getMeeting(id: self.meeting.id) {
+            Task { @MainActor in
+                if let m = try? await APIClient.shared.getMeeting(id: self.meeting.id),
+                   !m.rollingSnapshot.isEmpty {
                     self.rollingSnapshot = m.rollingSnapshot
                 }
             }
@@ -40,51 +56,40 @@ class ActiveMeetingModel {
     }
 
     func endMeeting(emailTo: String) async -> Meeting? {
+        elapsedTimer?.invalidate(); elapsedTimer = nil
+        summaryTimer?.invalidate(); summaryTimer = nil
+        isRecording = false
         if let lastURL = await chunker.stop() {
             _ = try? await APIClient.shared.sendChunk(meetingId: meeting.id, audioURL: lastURL)
         }
-        summaryTimer?.invalidate()
         return try? await APIClient.shared.endMeeting(meetingId: meeting.id, emailTo: emailTo)
     }
 }
 
+// MARK: – View
+
 struct ActiveMeetingView: View {
-    @State var model: ActiveMeetingModel
-    @AppStorage("userEmail") private var userEmail = ""
-    @State private var showEnd = false
+    // Owned by HomeView — survives back navigation
+    let model: ActiveMeetingModel
     var onEnded: ((Meeting) -> Void)?
+
+    @AppStorage("userEmail") private var userEmail = ""
+    @AppStorage("glassOpacity") private var glassOpacity = 0.85
+    @State private var showEnd = false
+    @State private var ending = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Transcript scroll
+            Color(.systemBackground).ignoresSafeArea()
+
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Status bar
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 8, height: 8)
-                                .opacity(model.isRecording ? 1 : 0.3)
-                                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: model.isRecording)
-                            Text(model.isRecording ? "Recording" : "Starting…")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            if model.isProcessing {
-                                HStack(spacing: 5) {
-                                    ProgressView().scaleEffect(0.7)
-                                    Text("Transcribing")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            Text(formatTime(model.elapsed))
-                                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
+                    VStack(alignment: .leading, spacing: 0) {
+                        statusBar
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
+                            .padding(.bottom, 16)
 
                         if model.meeting.rawTranscript.isEmpty {
                             Text("Start speaking — transcript will appear here.")
@@ -94,7 +99,7 @@ struct ActiveMeetingView: View {
                         } else {
                             Text(model.meeting.rawTranscript)
                                 .font(.system(size: 15))
-                                .lineSpacing(3)
+                                .lineSpacing(4)
                                 .foregroundStyle(.primary)
                                 .padding(.horizontal, 20)
                                 .id("transcript")
@@ -103,42 +108,34 @@ struct ActiveMeetingView: View {
                                 }
                         }
 
-                        Spacer().frame(height: 220)
+                        if let err = model.errorMessage {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .padding(.horizontal, 20)
+                                .padding(.top, 8)
+                        }
+
+                        Spacer().frame(height: 260)
                     }
                 }
             }
 
-            // Floating bottom panel
             VStack(spacing: 10) {
                 FloatingSummaryCard(snapshot: model.rollingSnapshot)
-
-                Button {
-                    showEnd = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "stop.circle.fill")
-                        Text("End Meeting")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(.red.opacity(0.88))
-                            .shadow(color: .red.opacity(0.3), radius: 12, x: 0, y: 6)
-                    )
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 20)
+                endButton
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
             }
         }
         .navigationTitle(model.meeting.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await model.startRecording() }
+        .navigationBarBackButtonHidden(false)
+        .task { await model.startIfNeeded() }
         .alert("End Meeting?", isPresented: $showEnd) {
             Button("End & Send Summary", role: .destructive) {
                 Task {
+                    ending = true
                     let ended = await model.endMeeting(emailTo: userEmail)
                     onEnded?(ended ?? model.meeting)
                 }
@@ -146,9 +143,64 @@ struct ActiveMeetingView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(userEmail.isEmpty
-                 ? "Meeting will be saved. Add your email in Settings to get a summary."
+                 ? "Meeting will be saved. Add your email in Settings to receive a summary."
                  : "Summary will be emailed to \(userEmail).")
         }
+    }
+
+    // MARK: Subviews
+
+    private var statusBar: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 7, height: 7)
+                    .opacity(model.isRecording ? 1 : 0.3)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                               value: model.isRecording)
+                Text(model.isRecording ? "Recording" : "Starting…")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if model.isProcessing {
+                HStack(spacing: 4) {
+                    ProgressView().scaleEffect(0.65)
+                    Text("Transcribing")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            Text(formatTime(model.elapsed))
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var endButton: some View {
+        Button {
+            showEnd = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "stop.circle.fill")
+                Text(ending ? "Ending…" : "End Meeting")
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.red.opacity(ending ? 0.5 : 0.9))
+                    .shadow(color: .red.opacity(0.3), radius: 12, x: 0, y: 5)
+            )
+        }
+        .disabled(ending)
+        .buttonStyle(.plain)
     }
 
     private func formatTime(_ s: Int) -> String {

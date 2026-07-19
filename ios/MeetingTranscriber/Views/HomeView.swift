@@ -5,100 +5,161 @@ struct HomeView: View {
     @State private var isLoading = true
     @State private var showNewMeeting = false
     @State private var newTitle = ""
-    @State private var activeMeeting: Meeting?
     @State private var error: String?
+
+    // Model lives HERE — persists when user navigates away from ActiveMeetingView
+    @State private var liveModel: ActiveMeetingModel? = nil
+    @State private var isInActiveMeeting = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Apple-style gradient background
-                LinearGradient(
-                    colors: [Color.purple.opacity(0.07), Color.indigo.opacity(0.04), Color(.systemBackground)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+            ZStack(alignment: .bottom) {
+                Color(.systemBackground).ignoresSafeArea()
 
                 Group {
                     if isLoading {
-                        ProgressView()
-                    } else if meetings.isEmpty {
-                        VStack(spacing: 16) {
-                            Image(systemName: "mic.circle.fill")
-                                .font(.system(size: 60))
-                                .foregroundStyle(.purple.opacity(0.35))
-                            Text("No meetings yet")
-                                .font(.title3.weight(.semibold))
-                            Text("Tap Start Meeting to begin recording")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(40)
+                        ProgressView().tint(.purple)
+                    } else if meetings.isEmpty && liveModel == nil {
+                        emptyState
                     } else {
-                        List(meetings) { item in
-                            NavigationLink(value: item.id) {
-                                MeetingRow(item: item)
-                            }
-                            .listRowBackground(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(.ultraThinMaterial)
-                                    .padding(.vertical, 2)
-                            )
-                            .listRowSeparator(.hidden)
-                        }
-                        .listStyle(.insetGrouped)
-                        .scrollContentBackground(.hidden)
+                        meetingList
                     }
+                }
+
+                // Floating badge when recording is backgrounded
+                if liveModel != nil && !isInActiveMeeting {
+                    recordingBadge
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(10)
                 }
             }
             .navigationTitle("Meetings")
-            .navigationDestination(for: String.self) { id in
-                MeetingDetailView(meetingId: id)
-            }
-            .navigationDestination(item: $activeMeeting) { meeting in
-                ActiveMeetingView(model: ActiveMeetingModel(meeting: meeting)) { ended in
-                    activeMeeting = nil
-                    Task { await loadMeetings() }
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gearshape.fill")
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "gearshape.fill").foregroundStyle(.secondary)
                     }
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        showNewMeeting = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "mic.fill")
-                            Text("Start Meeting")
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 28)
-                        .padding(.vertical, 13)
-                        .background(Capsule().fill(Color.purple)
-                            .shadow(color: .purple.opacity(0.35), radius: 12, x: 0, y: 6))
+                ToolbarItem(placement: .bottomBar) { bottomButton }
+            }
+            .navigationDestination(isPresented: $isInActiveMeeting) {
+                if let model = liveModel {
+                    ActiveMeetingView(model: model) { _ in
+                        liveModel = nil
+                        isInActiveMeeting = false
+                        Task { await loadMeetings() }
                     }
                 }
+            }
+            .navigationDestination(for: String.self) { id in
+                MeetingDetailView(meetingId: id)
             }
             .alert("New Meeting", isPresented: $showNewMeeting) {
                 TextField("Title (optional)", text: $newTitle)
                 Button("Start Recording") { Task { await startMeeting() } }
                 Button("Cancel", role: .cancel) { newTitle = "" }
             } message: {
-                Text("Give this meeting a title, or leave blank.")
+                Text("Give your meeting a name, or leave blank.")
             }
             .alert("Error", isPresented: .constant(error != nil)) {
                 Button("OK") { error = nil }
             } message: { Text(error ?? "") }
             .task { await loadMeetings() }
+            .animation(.spring(duration: 0.35), value: liveModel != nil)
+            .animation(.spring(duration: 0.35), value: isInActiveMeeting)
         }
     }
+
+    // MARK: – Subviews
+
+    private var emptyState: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(Color.purple.opacity(0.1))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "mic.circle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.purple.opacity(0.55))
+            }
+            VStack(spacing: 6) {
+                Text("No meetings yet")
+                    .font(.title3.weight(.semibold))
+                Text("Tap Start Meeting to begin recording")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(40)
+    }
+
+    private var meetingList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(meetings) { item in
+                    NavigationLink(value: item.id) {
+                        MeetingRow(item: item)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+    }
+
+    private var recordingBadge: some View {
+        Button { withAnimation { isInActiveMeeting = true } } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 8, height: 8)
+                Text("Recording in progress — tap to return")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.red.opacity(0.9))
+                    .shadow(color: .red.opacity(0.35), radius: 14, x: 0, y: 6)
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bottomButton: some View {
+        Button {
+            if liveModel != nil { isInActiveMeeting = true }
+            else { showNewMeeting = true }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(liveModel != nil ? .red : .white)
+                Text(liveModel != nil ? "Return to Recording" : "Start Meeting")
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(liveModel != nil ? .red : .white)
+            .padding(.horizontal, 26)
+            .padding(.vertical, 13)
+            .background(
+                Capsule()
+                    .fill(liveModel != nil ? Color.red.opacity(0.12) : Color.purple)
+                    .shadow(color: (liveModel != nil ? Color.red : Color.purple).opacity(0.3),
+                            radius: 12, x: 0, y: 5)
+            )
+        }
+    }
+
+    // MARK: – Actions
 
     private func loadMeetings() async {
         isLoading = true
@@ -110,22 +171,27 @@ struct HomeView: View {
         let title = newTitle.trimmingCharacters(in: .whitespaces)
         newTitle = ""
         do {
-            activeMeeting = try await APIClient.shared.startMeeting(title: title)
+            let meeting = try await APIClient.shared.startMeeting(title: title)
+            liveModel = ActiveMeetingModel(meeting: meeting)
+            isInActiveMeeting = true
         } catch {
             self.error = error.localizedDescription
         }
     }
 }
 
+// MARK: – Meeting Row
+
 struct MeetingRow: View {
     let item: MeetingListItem
+    @AppStorage("glassOpacity") private var glassOpacity = 0.85
 
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(item.status == .active ? Color.red.opacity(0.12) : Color.purple.opacity(0.1))
-                    .frame(width: 46, height: 46)
+                    .frame(width: 48, height: 48)
                 Image(systemName: item.status == .active ? "mic.fill" : "waveform")
                     .font(.system(size: 18))
                     .foregroundStyle(item.status == .active ? .red : .purple)
@@ -149,8 +215,14 @@ struct MeetingRow: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(.red.opacity(0.1)))
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassCard(opacity: glassOpacity, cornerRadius: 16)
     }
 }

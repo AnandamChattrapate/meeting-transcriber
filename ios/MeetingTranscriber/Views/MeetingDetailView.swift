@@ -43,7 +43,7 @@ struct MeetingDetailView: View {
                     }
                     .padding(16)
                 }
-                .background(Color(.systemGroupedBackground))
+                .background(Color.secondary.opacity(0.07))
                 .navigationTitle(m.displayTitle)
                 .navigationBarTitleDisplayMode(.large)
             }
@@ -61,6 +61,7 @@ struct MeetingDetailView: View {
 struct GlassSection<Content: View>: View {
     let title: String
     @ViewBuilder let content: Content
+    @AppStorage("glassOpacity") private var glassOpacity = 0.85
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -72,15 +73,7 @@ struct GlassSection<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.4), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.06), radius: 12, x: 0, y: 4)
-        )
+        .glassCard(opacity: glassOpacity, cornerRadius: 16)
     }
 }
 
