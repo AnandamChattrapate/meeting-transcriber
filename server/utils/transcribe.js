@@ -2,6 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const ffmpegPath = require('ffmpeg-static');
 
 const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
@@ -12,7 +13,7 @@ const CHUNK_SECONDS = Math.floor((MAX_CHUNK_BYTES * 0.9) / 8000);
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args);
+    const proc = spawn(ffmpegPath, args);
     let stderr = '';
     proc.stderr.on('data', (d) => { stderr += d; });
     proc.on('error', (err) => reject(new Error(`ffmpeg not available: ${err.message}`)));

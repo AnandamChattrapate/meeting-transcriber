@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /\.(mp3|mp4|mpeg|mpga|m4a|wav|webm|ogg)$/i;
     if (!allowed.test(file.originalname)) {
